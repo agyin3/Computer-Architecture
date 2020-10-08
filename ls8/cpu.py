@@ -6,6 +6,8 @@ HLT = 0b00000001
 LDI = 0b10000010
 PRN = 0b01000111
 MUL = 0b10100010
+POP = 0b01000110
+PUSH = 0b01000101
 
 
 class CPU:
@@ -18,12 +20,17 @@ class CPU:
         self.pc = 0
         self.running = False
 
+        # initialize stack pointer(SP) -> F4
+        self.reg[7] = 0xF4
+
         # create branch table
         self.branchtable = {}
         self.branchtable[HLT] = self.handle_HLT
         self.branchtable[LDI] = self.handle_LDI
         self.branchtable[PRN] = self.handle_PRN
         self.branchtable[MUL] = self.handle_MUL
+        self.branchtable[POP] = self.handle_POP
+        self.branchtable[PUSH] = self.handle_PUSH
 
     def ram_read(self, mar):
         return self.ram[mar]
@@ -58,23 +65,65 @@ class CPU:
         self.alu("MUL", reg_idx_a, reg_idx_b)
         self.pc += 3
 
-    def load(self, file):
-        """Load a program into memory."""
+    def handle_PUSH(self):
+        # 1. Decrement the `SP`.
+        self.reg[7] -= 1
 
-        program = []
-        file_obj = open(file, 'r')
-        for line in file_obj:
-            if line == '\n' or line[0] == '#':
-                continue
-            else:
-                integer = int(line[0:8], 2)
-                program.append(integer)
+        SP = self.reg[7]
+
+        # 2. Copy the value in the given register to the address pointed to by `SP`.
+
+        # Get value from register
+        reg_idx = self.ram_read(self.pc + 1)
+        value = self.reg[reg_idx]
+
+        # Save to RAM
+        self.ram[SP] = value
+
+        # 3. Increment PC
+        self.pc += 2
+
+    def handle_POP(self):
+        # 1. Copy the value from the address pointed to by `SP` to the given register.
+        # Get position of SP
+        SP = self.reg[7]
+
+        # Get value from RAM
+        reg_idx = self.ram_read(self.pc + 1)
+        value = self.ram[SP]
+
+        # Save to register
+        self.reg[reg_idx] = value
+
+        # 2. Increment `SP`.
+        self.reg[7] += 1
+
+        # 3. Increment PC
+        self.pc += 2
+
+    def load(self, input):
+        """Load a program into memory."""
+        if len(input) != 2:
+            print("remember to pass the second file name")
+            print("usage: python3 ls8.py <second_file_name.py>")
+            sys.exit()
 
         address = 0
 
-        for instruction in program:
-            self.ram[address] = instruction
-            address += 1
+        try:
+            with open(input[1]) as file:
+                for line in file:
+                    if line == '\n' or line[0] == '#':
+                        continue
+
+                    integer = int(line[0:8], 2)
+                    self.ram[address] = integer
+
+                    address += 1
+
+        except FileNotFoundError:
+            print(f'Error from {input[0]}: {input[1]} not found')
+            sys.exit()
 
     def alu(self, op, reg_a, reg_b):
         """ALU operations."""
